@@ -114,14 +114,22 @@ A comprehensive Model Context Protocol (MCP) server for Zabbix integration using
 
 - `ZABBIX_URL` - Your Zabbix server API endpoint (e.g., `https://zabbix.example.com`)
 
-### Authentication (choose one method)
+### Authentication
 
-**Method 1: API Token (Recommended)**
-- `ZABBIX_TOKEN` - Your Zabbix API token
+Authentication depends on the transport and `AUTH_TYPE` used. See the table below:
 
-**Method 2: Username/Password**
-- `ZABBIX_USER` - Your Zabbix username
-- `ZABBIX_PASSWORD` - Your Zabbix password
+| Transport | `AUTH_TYPE` | `ZABBIX_TOKEN` | Token source |
+|---|---|---|---|
+| `stdio` | N/A | Required | Env var |
+| `streamable-http` | `no-auth` | Required | Env var |
+| `streamable-http` | `zabbix-api-key` | Not required | `Authorization: Bearer` header |
+
+**For `stdio` and `no-auth` — set one of:**
+
+- `ZABBIX_TOKEN` - Your Zabbix API token (recommended)
+- `ZABBIX_USER` + `ZABBIX_PASSWORD` - Username and password
+
+**For `zabbix-api-key` — no credential env vars needed.** The token is provided per-request by the caller via `Authorization: Bearer <token>`. The server validates it against Zabbix before establishing the MCP session.
 
 ### Optional Configuration
 
@@ -136,7 +144,7 @@ A comprehensive Model Context Protocol (MCP) server for Zabbix integration using
 - `ZABBIX_MCP_HOST` - Server host (default: `127.0.0.1`)
 - `ZABBIX_MCP_PORT` - Server port (default: `8000`)
 - `ZABBIX_MCP_STATELESS_HTTP` - Stateless mode (default: `false`)
-- `AUTH_TYPE` - Must be set to `no-auth` for streamable-http transport
+- `AUTH_TYPE` - Authentication mode: `no-auth` or `zabbix-api-key`
 
 ## Usage
 
@@ -164,17 +172,32 @@ ZABBIX_MCP_TRANSPORT=stdio
 ```
 
 #### HTTP Transport
-HTTP-based transport for web integrations:
+HTTP-based transport for web integrations. Two authentication modes are available:
+
+**`no-auth` — private network deployments (token in env vars):**
 ```bash
-# Set in .env or environment
 ZABBIX_MCP_TRANSPORT=streamable-http
 ZABBIX_MCP_HOST=127.0.0.1
 ZABBIX_MCP_PORT=8000
-ZABBIX_MCP_STATELESS_HTTP=false
 AUTH_TYPE=no-auth
+ZABBIX_TOKEN=<your-zabbix-api-token>
 ```
 
-**Note:** When using `streamable-http` transport, `AUTH_TYPE` must be set to `no-auth`.
+**`zabbix-api-key` — internet-facing deployments (token per request):**
+```bash
+ZABBIX_MCP_TRANSPORT=streamable-http
+ZABBIX_MCP_HOST=0.0.0.0
+ZABBIX_MCP_PORT=8000
+AUTH_TYPE=zabbix-api-key
+ZABBIX_URL=https://zabbix.example.com
+# ZABBIX_TOKEN is not set — callers send it via Authorization: Bearer <token>
+```
+
+When using `zabbix-api-key`, the caller must include the Zabbix API token in every request:
+```
+Authorization: Bearer <zabbix_token>
+```
+The server validates the token against Zabbix before establishing the MCP session. Invalid or missing tokens receive HTTP 401.
 
 ### Testing
 
