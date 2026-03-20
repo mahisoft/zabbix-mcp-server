@@ -54,19 +54,6 @@ def check_environment() -> bool:
         print("\nPlease set these variables or create a .env file")
         return False
     
-    # Check authentication configuration
-    token = os.getenv("ZABBIX_TOKEN")
-    user = os.getenv("ZABBIX_USER")
-    password = os.getenv("ZABBIX_PASSWORD")
-    
-    if not token and not (user and password):
-        logger.error("Authentication not configured")
-        print("Error: Authentication not configured")
-        print("Please set either:")
-        print("  - ZABBIX_TOKEN (recommended)")
-        print("  - Both ZABBIX_USER and ZABBIX_PASSWORD")
-        return False
-    
     # Check transport configuration
     transport = os.getenv("ZABBIX_MCP_TRANSPORT", "stdio").lower()
     if transport not in ["stdio", "streamable-http"]:
@@ -74,14 +61,31 @@ def check_environment() -> bool:
         print(f"Error: Invalid ZABBIX_MCP_TRANSPORT: {transport}")
         print("Valid values are: stdio, streamable-http")
         return False
-    
+
+    # Check AUTH_TYPE for streamable-http
+    auth_type = os.getenv("AUTH_TYPE", "").lower()
     if transport == "streamable-http":
-        auth_type = os.getenv("AUTH_TYPE", "").lower()
-        if auth_type != "no-auth":
-            logger.error("AUTH_TYPE must be 'no-auth' for streamable-http transport")
-            print("Error: AUTH_TYPE must be set to 'no-auth' when using streamable-http transport")
+        valid_auth_types = {"no-auth", "zabbix-api-key"}
+        if auth_type not in valid_auth_types:
+            logger.error(f"Invalid AUTH_TYPE: '{auth_type}'")
+            print(f"Error: AUTH_TYPE must be one of {valid_auth_types} when using streamable-http transport")
             return False
-    
+
+    # Check authentication configuration
+    # zabbix-api-key mode gets credentials from request headers, not env vars
+    if not (transport == "streamable-http" and auth_type == "zabbix-api-key"):
+        token = os.getenv("ZABBIX_TOKEN")
+        user = os.getenv("ZABBIX_USER")
+        password = os.getenv("ZABBIX_PASSWORD")
+
+        if not token and not (user and password):
+            logger.error("Authentication not configured")
+            print("Error: Authentication not configured")
+            print("Please set either:")
+            print("  - ZABBIX_TOKEN (recommended)")
+            print("  - Both ZABBIX_USER and ZABBIX_PASSWORD")
+            return False
+
     return True
 
 
@@ -102,7 +106,13 @@ def show_configuration() -> None:
     logger.info(f"Zabbix URL: {zabbix_url}")
     
     # Authentication method
-    if os.getenv('ZABBIX_TOKEN'):
+    transport = os.getenv('ZABBIX_MCP_TRANSPORT', 'stdio').lower()
+    auth_type_val = os.getenv('AUTH_TYPE', '').lower()
+
+    if transport == 'streamable-http' and auth_type_val == 'zabbix-api-key':
+        auth_method = 'Per-request Bearer token (zabbix-api-key)'
+        logger.info("Authentication: Per-request Bearer token (zabbix-api-key)")
+    elif os.getenv('ZABBIX_TOKEN'):
         auth_method = 'API Token'
         logger.info("Authentication: API Token")
     elif os.getenv('ZABBIX_USER'):

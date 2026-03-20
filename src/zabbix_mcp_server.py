@@ -15,6 +15,8 @@ import json
 import logging
 from typing import Any, Dict, List, Optional, Union
 from fastmcp import FastMCP
+from fastmcp.server.auth import TokenVerifier, AccessToken
+from fastmcp.server.dependencies import get_access_token
 from zabbix_utils import ZabbixAPI
 from dotenv import load_dotenv
 
@@ -28,55 +30,84 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Initialize FastMCP
-mcp = FastMCP("Zabbix MCP Server")
 
-# Global Zabbix API client
-zabbix_api: Optional[ZabbixAPI] = None
+class ZabbixTokenVerifier(TokenVerifier):
+    """Verify Bearer tokens by validating them against the Zabbix API."""
+
+    def __init__(self, zabbix_url: str, verify_ssl: bool = True):
+        super().__init__()
+        self._zabbix_url = zabbix_url
+        self._verify_ssl = verify_ssl
+
+    async def verify_token(self, token: str) -> AccessToken | None:
+        try:
+            client = ZabbixAPI(url=self._zabbix_url, validate_certs=self._verify_ssl)
+            client.login(token=token)
+            return AccessToken(token=token, client_id="zabbix", scopes=[])
+        except Exception:
+            return None
+
+
+def _create_mcp() -> FastMCP:
+    """Create FastMCP instance with auth configuration based on env vars."""
+    transport = os.getenv("ZABBIX_MCP_TRANSPORT", "stdio").lower()
+    auth_type = os.getenv("AUTH_TYPE", "").lower()
+
+    if transport == "streamable-http" and auth_type == "zabbix-api-key":
+        url = os.getenv("ZABBIX_URL")
+        if not url:
+            raise ValueError("ZABBIX_URL is required when AUTH_TYPE=zabbix-api-key")
+        verify_ssl = os.getenv("VERIFY_SSL", "true").lower() in ("true", "1", "yes")
+        logger.info("Initializing FastMCP with ZabbixTokenVerifier auth")
+        return FastMCP("Zabbix MCP Server", auth=ZabbixTokenVerifier(url, verify_ssl))
+
+    return FastMCP("Zabbix MCP Server")
+
+
+mcp = _create_mcp()
 
 
 def get_zabbix_client() -> ZabbixAPI:
-    """Get or create Zabbix API client with proper authentication.
-    
+    """Get an authenticated Zabbix API client.
+
+    Token resolution order:
+    1. Request-context token (zabbix-api-key mode via FastMCP auth)
+    2. ZABBIX_TOKEN env var (stdio / no-auth modes)
+    3. ZABBIX_USER + ZABBIX_PASSWORD env vars (stdio / no-auth modes)
+
     Returns:
         ZabbixAPI: Authenticated Zabbix API client
-        
+
     Raises:
         ValueError: If required environment variables are missing
         Exception: If authentication fails
     """
-    global zabbix_api
-    
-    if zabbix_api is None:
-        url = os.getenv("ZABBIX_URL")
-        if not url:
-            raise ValueError("ZABBIX_URL environment variable is required")
-        
-        logger.info(f"Initializing Zabbix API client for {url}")
-        
-        # Configure SSL verification
-        verify_ssl = os.getenv("VERIFY_SSL", "true").lower() in ("true", "1", "yes")
-        logger.info(f"SSL certificate verification: {'enabled' if verify_ssl else 'disabled'}")
-        
-        # Initialize client
-        zabbix_api = ZabbixAPI(url=url, validate_certs=verify_ssl)
+    url = os.getenv("ZABBIX_URL")
+    if not url:
+        raise ValueError("ZABBIX_URL environment variable is required")
 
-        # Authenticate using token or username/password
-        token = os.getenv("ZABBIX_TOKEN")
-        if token:
-            logger.info("Authenticating with API token")
-            zabbix_api.login(token=token)
-        else:
-            user = os.getenv("ZABBIX_USER")
-            password = os.getenv("ZABBIX_PASSWORD")
-            if not user or not password:
-                raise ValueError("Either ZABBIX_TOKEN or ZABBIX_USER/ZABBIX_PASSWORD must be set")
-            logger.info(f"Authenticating with username: {user}")
-            zabbix_api.login(user=user, password=password)
-        
-        logger.info("Successfully authenticated with Zabbix API")
-    
-    return zabbix_api
+    verify_ssl = os.getenv("VERIFY_SSL", "true").lower() in ("true", "1", "yes")
+    client = ZabbixAPI(url=url, validate_certs=verify_ssl)
+
+    # Try request-context token first (zabbix-api-key mode)
+    access_token = get_access_token()
+    if access_token is not None:
+        client.login(token=access_token.token)
+        return client
+
+    # Fallback: env var credentials (stdio / no-auth modes)
+    token = os.getenv("ZABBIX_TOKEN")
+    if token:
+        client.login(token=token)
+        return client
+
+    user = os.getenv("ZABBIX_USER")
+    password = os.getenv("ZABBIX_PASSWORD")
+    if user and password:
+        client.login(user=user, password=password)
+        return client
+
+    raise ValueError("Either ZABBIX_TOKEN or ZABBIX_USER/ZABBIX_PASSWORD must be set")
 
 
 def is_read_only() -> bool:
@@ -1508,18 +1539,23 @@ def get_transport_config() -> Dict[str, Any]:
     
     if transport == "streamable-http":
         # Check AUTH_TYPE requirement
+        valid_auth_types = {"no-auth", "zabbix-api-key"}
         auth_type = os.getenv("AUTH_TYPE", "").lower()
-        if auth_type != "no-auth":
-            raise ValueError("AUTH_TYPE must be set to 'no-auth' when using streamable-http transport")
-        
+        if auth_type not in valid_auth_types:
+            raise ValueError(
+                f"AUTH_TYPE must be one of {valid_auth_types} "
+                f"when using streamable-http transport"
+            )
+        config["auth_type"] = auth_type
+
         # Get HTTP configuration with defaults
         config.update({
             "host": os.getenv("ZABBIX_MCP_HOST", "127.0.0.1"),
             "port": int(os.getenv("ZABBIX_MCP_PORT", "8000")),
             "stateless_http": os.getenv("ZABBIX_MCP_STATELESS_HTTP", "false").lower() in ("true", "1", "yes")
         })
-        
-        logger.info(f"HTTP transport configured: {config['host']}:{config['port']}, stateless_http={config['stateless_http']}")
+
+        logger.info(f"HTTP transport configured: {config['host']}:{config['port']}, stateless_http={config['stateless_http']}, auth_type={auth_type}")
     
     return config
 
