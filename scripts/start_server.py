@@ -62,18 +62,18 @@ def check_environment() -> bool:
         print("Valid values are: stdio, streamable-http")
         return False
 
-    # Check AUTH_TYPE for streamable-http
+    # Check AUTH_TYPE for HTTP transports
     auth_type = os.getenv("AUTH_TYPE", "").lower()
-    if transport == "streamable-http":
+    if transport != "stdio":
         valid_auth_types = {"no-auth", "zabbix-api-key"}
         if auth_type not in valid_auth_types:
             logger.error(f"Invalid AUTH_TYPE: '{auth_type}'")
-            print(f"Error: AUTH_TYPE must be one of {valid_auth_types} when using streamable-http transport")
+            print(f"Error: AUTH_TYPE must be one of {valid_auth_types} when using {transport} transport")
             return False
 
     # Check authentication configuration
     # zabbix-api-key mode gets credentials from request headers, not env vars
-    if not (transport == "streamable-http" and auth_type == "zabbix-api-key"):
+    if not (transport != "stdio" and auth_type == "zabbix-api-key"):
         token = os.getenv("ZABBIX_TOKEN")
         user = os.getenv("ZABBIX_USER")
         password = os.getenv("ZABBIX_PASSWORD")
@@ -109,7 +109,7 @@ def show_configuration() -> None:
     transport = os.getenv('ZABBIX_MCP_TRANSPORT', 'stdio').lower()
     auth_type_val = os.getenv('AUTH_TYPE', '').lower()
 
-    if transport == 'streamable-http' and auth_type_val == 'zabbix-api-key':
+    if transport != 'stdio' and auth_type_val == 'zabbix-api-key':
         auth_method = 'Per-request Bearer token (zabbix-api-key)'
         logger.info("Authentication: Per-request Bearer token (zabbix-api-key)")
     elif os.getenv('ZABBIX_TOKEN'):

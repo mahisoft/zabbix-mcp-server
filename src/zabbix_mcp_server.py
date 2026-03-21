@@ -43,6 +43,8 @@ class ZabbixTokenVerifier(TokenVerifier):
         try:
             client = ZabbixAPI(url=self._zabbix_url, validate_certs=self._verify_ssl)
             client.login(token=token)
+            # login() only stores the token — make a real API call to validate it
+            client.user.get(output=["userid"], limit=1)
             return AccessToken(token=token, client_id="zabbix", scopes=[])
         except Exception:
             return None
@@ -53,7 +55,7 @@ def _create_mcp() -> FastMCP:
     transport = os.getenv("ZABBIX_MCP_TRANSPORT", "stdio").lower()
     auth_type = os.getenv("AUTH_TYPE", "").lower()
 
-    if transport == "streamable-http" and auth_type == "zabbix-api-key":
+    if transport != "stdio" and auth_type == "zabbix-api-key":
         url = os.getenv("ZABBIX_URL")
         if not url:
             raise ValueError("ZABBIX_URL is required when AUTH_TYPE=zabbix-api-key")
@@ -1537,14 +1539,14 @@ def get_transport_config() -> Dict[str, Any]:
     
     config = {"transport": transport}
     
-    if transport == "streamable-http":
+    if transport != "stdio":
         # Check AUTH_TYPE requirement
         valid_auth_types = {"no-auth", "zabbix-api-key"}
         auth_type = os.getenv("AUTH_TYPE", "").lower()
         if auth_type not in valid_auth_types:
             raise ValueError(
                 f"AUTH_TYPE must be one of {valid_auth_types} "
-                f"when using streamable-http transport"
+                f"when using {transport} transport"
             )
         config["auth_type"] = auth_type
 
