@@ -20,3 +20,24 @@ services:
     restart: unless-stopped
     volumes:
       - ./logs:/app/logs
+  # zabbix-mcp-2:
+  #   build: .
+  #   container_name: zabbix-mcp-server-2
+  #   environment:
+  #     - ZABBIX_URL=http://192.168.200.241:8080
+  #     - ZABBIX_TOKEN=${ZABBIX_TOKEN:-}
+  #     - ZABBIX_USER=${ZABBIX_USER:-}
+  #     - ZABBIX_PASSWORD=${ZABBIX_PASSWORD:-}
+  #     - READ_ONLY=${READ_ONLY:-true}
+  #     - VERIFY_SSL=${VERIFY_SSL:-true}
+  #     - ZABBIX_MCP_TRANSPORT=${ZABBIX_MCP_TRANSPORT:-stdio}
+  #     - ZABBIX_MCP_HOST=0.0.0.0
+  #     - ZABBIX_MCP_PORT=8000
+  #     - ZABBIX_MCP_STATELESS_HTTP=${ZABBIX_MCP_STATELESS_HTTP:-false}
+  #     - AUTH_TYPE=${AUTH_TYPE:-no-auth}
+  #     - DEBUG=${DEBUG:-false}
+  #   ports:
+  #     - "8001:8000"
+  #   restart: unless-stopped
+  #   volumes:
+  #     - ./logs:/app/logs
