@@ -38,6 +38,9 @@ Documentation = "https://github.com/mpeirone/zabbix-mcp-server#readme"
 [project.scripts]
 zabbix-mcp = "src.zabbix_mcp_server:main"
 
+[dependency-groups]
+dev = ["pyinstaller>=6.0"]
+
 [build-system]
 requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
