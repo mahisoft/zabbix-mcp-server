@@ -108,6 +108,33 @@ A comprehensive Model Context Protocol (MCP) server for Zabbix integration using
    uv run python scripts/test_server.py
    ```
 
+### Bare-Metal Install (no Docker, no Python)
+
+For environments where Docker and Python are not available, you can build a standalone binary with no runtime dependencies:
+
+1. **Build the binary** (requires Python 3.10+ and `uv` on the build host only):
+   ```bash
+   ./scripts/build_standalone.sh
+   ```
+
+2. **Copy the output** to your target host:
+   ```bash
+   # The build produces: dist/zabbix-mcp-server-<os>-<arch>/
+   tar -czf zabbix-mcp-server.tar.gz -C dist zabbix-mcp-server-linux-x86_64/
+   scp zabbix-mcp-server.tar.gz user@target-host:~/
+   ```
+
+3. **Configure and run** on the target host:
+   ```bash
+   tar xzf zabbix-mcp-server.tar.gz && cd zabbix-mcp-server-linux-x86_64/
+   cp .env.example .env   # edit with your Zabbix credentials
+   ./zabbix-mcp-server-linux-x86_64
+   ```
+
+For a single-file executable instead of a directory: `./scripts/build_standalone.sh --onefile`
+
+See `README-bare-metal.md` in the build output for full instructions and troubleshooting.
+
 ## Configuration
 
 ### Required Environment Variables
