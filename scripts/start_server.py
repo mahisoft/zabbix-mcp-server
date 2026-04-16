@@ -17,7 +17,14 @@ from typing import List
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
-load_dotenv()
+# When running as a PyInstaller frozen binary, resolve .env relative to
+# the executable so it works regardless of the user's working directory.
+if getattr(sys, 'frozen', False):
+    _dotenv_path = Path(sys.executable).parent / '.env'
+else:
+    _dotenv_path = None  # load_dotenv() default: search from cwd upward
+
+load_dotenv(_dotenv_path)
 
 # Add src directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))

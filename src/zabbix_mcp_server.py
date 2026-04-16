@@ -11,6 +11,7 @@ License: MIT
 """
 
 import os
+import sys
 import json
 import logging
 from typing import Any, Dict, List, Optional, Union
@@ -21,7 +22,13 @@ from zabbix_utils import ZabbixAPI
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
-load_dotenv()
+# When running as a PyInstaller frozen binary, resolve .env relative to
+# the executable so it works regardless of the user's working directory.
+if getattr(sys, 'frozen', False):
+    _dotenv_dir = os.path.dirname(sys.executable)
+    load_dotenv(os.path.join(_dotenv_dir, '.env'))
+else:
+    load_dotenv()
 
 # Configure logging
 logging.basicConfig(
